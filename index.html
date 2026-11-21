@@ -148,6 +148,10 @@ function parseM3U(text){
 async function loadPlaylist(){
   const url = store.get('plUrl', ''), text = store.get('plText', '');
   let src = text;
+  // nothing saved yet: load the demo playlist.m3u that sits next to this page (same site, so no CORS problem)
+  if(!src && !url){
+    try{ const r = await fetch('playlist.m3u', { cache: 'no-cache' }); if(r.ok) src = await r.text(); }catch(e){}
+  }
   if(!src && url){
     try{ src = await (await fetch(url)).text(); }
     catch(e){ $('list').innerHTML = '<div class="empty">Could not load the playlist link. Open Settings and paste the playlist text or choose the file instead.</div>'; return; }
