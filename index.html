@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Live TV">
+<meta name="theme-color" content="#16132a">
+<title>Live TV</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png" type="image/png">
+<style>
+:root{color-scheme:dark;--bg:#16132a;--row:#2b2850;--row2:#38346a;--acc:#ff4b4b;--tx:#f4f2ff;--mut:#a29fc9}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--tx);font:600 16px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,select,input,textarea{font:inherit;color:inherit}
+#app{height:100%;display:flex;gap:14px;padding:calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left))}
+#app.phone{flex-direction:column}
+.list{flex:1.25;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:3px;-webkit-overflow-scrolling:touch}
+.side{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+.phone .side{order:-1;flex:none;overflow:visible}
+.phone .list{flex:1}
+.vid{aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden;border:2px solid var(--row2);position:relative}
+.vid:focus-visible{outline:none;border-color:#fff;box-shadow:0 0 0 3px var(--acc)}
+video{width:100%;height:100%;display:block;background:#000}
+#msg{position:absolute;inset:auto 0 0 0;padding:6px 10px;background:#000a;font-size:13px;display:none}
+#toast,#exit{display:none}
+body.fs .vid{position:fixed;inset:0;z-index:50;border:0;border-radius:0;aspect-ratio:auto;touch-action:none}
+body.fs #toast{display:block;position:absolute;top:calc(14px + env(safe-area-inset-top));left:16px;max-width:70%;padding:8px 14px;border-radius:10px;background:#000a;font-size:20px;opacity:0;transition:opacity .25s;pointer-events:none}
+body.fs #exit{display:block;position:absolute;top:calc(14px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));width:44px;height:44px;border-radius:50%;border:0;background:#000a;font-size:20px;cursor:pointer}
+#now{font-size:18px;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabs,.menu{display:flex;gap:8px}
+.btn,.ch{background:var(--row);border:2px solid transparent;border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left}
+.btn{text-align:center;flex:1}
+.btn[aria-pressed=true]{background:#5a2f4f;border-color:var(--acc)}
+.btn:focus-visible,.ch:focus-visible,.star:focus-visible{outline:none;border-color:#fff;box-shadow:0 0 0 3px var(--acc)}
+.ch{display:flex;align-items:center;gap:12px;width:100%}
+.ch.on{background:#4a2745;border-color:var(--acc)}
+.ch img,.ch i{width:38px;height:38px;border-radius:9px;object-fit:contain;background:var(--row2);flex:none;display:grid;place-items:center;font-style:normal;color:var(--mut)}
+.ch span.n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch b{font-size:11px;color:var(--acc)}
+.star{font-size:24px;color:var(--mut);padding:0 4px;background:none;border:0;cursor:pointer;line-height:1}
+.star.f{color:#ffd24a}
+.empty{padding:24px;color:var(--mut);text-align:center}
+dialog{background:#211e3f;border:2px solid var(--row2);border-radius:16px;padding:18px;width:min(520px,94vw);max-height:92vh;overflow:auto}
+dialog::backdrop{background:#000b}
+label{display:block;margin:12px 0 4px;color:var(--mut);font-size:14px}
+label.chk{display:flex;gap:10px;align-items:center;color:var(--tx)}
+select,input[type=url],textarea,input[type=file]{width:100%;background:var(--row);border:2px solid var(--row2);border-radius:10px;padding:10px}
+input[type=checkbox]{width:22px;height:22px}
+textarea{height:80px;resize:vertical}
+.row{display:flex;gap:8px;margin-top:14px}
+</style>
+</head>
+<body>
+<div id="app" class="tv">
+  <div class="list" id="list" role="list"></div>
+  <div class="side">
+    <div class="vid" id="vidbox" tabindex="0">
+      <video id="v" autoplay playsinline webkit-playsinline></video>
+      <div id="toast"></div>
+      <button id="exit" aria-label="Exit fullscreen">&#10005;</button>
+      <div id="msg"></div>
+    </div>
+    <div id="now">No channel selected</div>
+    <div class="tabs">
+      <button class="btn" id="tAll" aria-pressed="true">All</button>
+      <button class="btn" id="tFav" aria-pressed="false">Favorites</button>
+    </div>
+    <div class="menu">
+      <button class="btn" id="bSet">Settings</button>
+      <button class="btn" id="bFs">Fullscreen</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <h2 style="margin:0 0 4px">Settings</h2>
+  <label for="lay">Layout</label>
+  <select id="lay">
+    <option value="auto">Auto (follows device rotation)</option>
+    <option value="tv">Landscape (TV / head unit)</option>
+    <option value="phone">Portrait (phone)</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="auto"> Auto fullscreen after 3 seconds (Landscape layout only)</label>
+  <label for="url">Playlist link (.m3u / .m3u8)</label>
+  <input id="url" type="url" placeholder="https://example.com/playlist.m3u">
+  <label for="txt">Or paste playlist text</label>
+  <textarea id="txt" placeholder="#EXTM3U&#10;#EXTINF:-1 tvg-logo=&quot;...&quot;,Channel name&#10;https://..."></textarea>
+  <label for="file">Or open a playlist file</label>
+  <input id="file" type="file" accept=".m3u,.m3u8,text/plain,audio/x-mpegurl">
+  <div class="row">
+    <button class="btn" id="save">Save and load</button>
+    <button class="btn" id="close">Close</button>
+  </div>
+  <p id="err" style="color:#ff9a9a;margin:10px 0 0;font-size:14px"></p>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+let channels = [], favs = new Set(store.get('favs', [])), tab = 'all', cur = null, hls = null;
+let fs = false, armed = false, afT = null, tT = null;
+const v = $('v');
+const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+/* ---------- offline app shell (needs HTTPS) ---------- */
+if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+/* ---------- layout ---------- */
+function applyLayout(){
+  const pref = store.get('layout', 'auto');
+  $('app').className = pref === 'auto' ? (innerWidth > innerHeight ? 'tv' : 'phone') : pref;
+}
+addEventListener('resize', applyLayout);
+addEventListener('orientationchange', () => setTimeout(applyLayout, 250));
+const isTv = () => $('app').classList.contains('tv');
+
+/* ---------- playlist ---------- */
+function parseM3U(text){
+  const out = [], seen = new Set();
+  let meta = null;
+  for(const raw of text.split(/\r?\n/)){
+    const l = raw.trim();
+    if(l.startsWith('#EXTINF')){
+      meta = {
+        name: l.slice(l.lastIndexOf(',') + 1).trim() || 'Channel',
+        logo: (l.match(/tvg-logo="([^"]*)"/) || [])[1] || '',
+        grp: (l.match(/group-title="([^"]*)"/) || [])[1] || ''
+      };
+    } else if(l && !l.startsWith('#')){
+      if(!seen.has(l)){ seen.add(l); out.push({ name: meta ? meta.name : l, logo: meta ? meta.logo : '', grp: meta ? meta.grp : '', url: l }); }
+      meta = null;
+    }
+  }
+  return out;
+}
+async function loadPlaylist(){
+  const url = store.get('plUrl', ''), text = store.get('plText', '');
+  let src = text;
+  if(!src && url){
+    try{ src = await (await fetch(url)).text(); }
+    catch(e){ $('list').innerHTML = '<div class="empty">Could not load the playlist link. Open Settings and paste the playlist text or choose the file instead.</div>'; return; }
+  }
+  channels = src ? parseM3U(src) : [];
+  render();
+  const last = store.get('last', '');
+  const start = channels.find(c => c.url === last);
+  if(start) play(start);
+}
+
+/* ---------- list ---------- */
+const visible = () => channels.filter(c => tab === 'all' || favs.has(c.url));
+function render(){
+  const list = $('list'), items = visible();
+  list.innerHTML = '';
+  if(!items.length){
+    const d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = !channels.length ? 'No channels yet. Open Settings and add a playlist.' : 'No favorites yet. Tap the star on a channel to add it.';
+    list.appendChild(d);
+    return;
+  }
+  for(const c of items){
+    const b = document.createElement('div');
+    b.className = 'ch' + (cur && cur.url === c.url ? ' on' : '');
+    b.tabIndex = 0; b.setAttribute('role', 'listitem');
+    const logo = document.createElement(c.logo ? 'img' : 'i');
+    if(c.logo){ logo.src = c.logo; logo.alt = ''; logo.onerror = () => { const f = document.createElement('i'); f.textContent = c.name[0] || '?'; logo.replaceWith(f); }; }
+    else logo.textContent = c.name[0] || '?';
+    const n = document.createElement('span'); n.className = 'n'; n.textContent = c.name;
+    b.append(logo, n);
+    if(cur && cur.url === c.url){ const p = document.createElement('b'); p.textContent = 'Now playing'; b.append(p); }
+    const s = document.createElement('button');
+    s.className = 'star' + (favs.has(c.url) ? ' f' : ''); s.tabIndex = -1;
+    s.textContent = favs.has(c.url) ? '\u2605' : '\u2606';
+    s.setAttribute('aria-label', 'Toggle favorite');
+    s.onclick = e => { e.stopPropagation(); toggleFav(c); };
+    b.append(s);
+    b.onclick = () => pick(c);
+    b.onkeydown = e => {
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); pick(c); }
+      else if(e.key === 'f' || e.key === 'F'){ toggleFav(c); }
+      else if(e.key === 'ArrowRight' && isTv()){ e.preventDefault(); $('vidbox').focus(); }
+    };
+    list.appendChild(b);
+  }
+}
+function toggleFav(c){
+  favs.has(c.url) ? favs.delete(c.url) : favs.add(c.url);
+  store.set('favs', [...favs]);
+  const i = [...$('list').children].indexOf(document.activeElement);
+  render();
+  if(i >= 0 && $('list').children[i]) $('list').children[i].focus();
+}
+
+/* ---------- player ---------- */
+function say(t){ const m = $('msg'); m.textContent = t; m.style.display = t ? 'block' : 'none'; }
+function toast(t){
+  const e = $('toast'); e.textContent = t || ''; e.style.opacity = 1;
+  clearTimeout(tT); tT = setTimeout(() => { e.style.opacity = 0; }, 2200);
+}
+function play(c){
+  cur = c; store.set('last', c.url);
+  $('now').textContent = c.name;
+  say('Loading\u2026');
+  if(hls){ hls.destroy(); hls = null; }
+  v.removeAttribute('src'); v.load();
+  const native = v.canPlayType('application/vnd.apple.mpegurl');
+  const plain = /\.(mp4|mkv|webm|mp3|aac)(\?|$)/i.test(c.url);
+  if(plain || (ios && native) || !(window.Hls && Hls.isSupported())){ v.src = c.url; }
+  else {
+    hls = new Hls({ lowLatencyMode: true });
+    hls.loadSource(c.url); hls.attachMedia(v);
+    hls.on(Hls.Events.ERROR, (_, d) => { if(d.fatal) say('This channel is not available right now.'); });
+  }
+  const p = v.play(); if(p && p.catch) p.catch(() => say('Tap the video to play'));
+  v.onplaying = () => say('');
+  v.onerror = () => say('This channel is not available right now.');
+  try{
+    if('mediaSession' in navigator && window.MediaMetadata)
+      navigator.mediaSession.metadata = new MediaMetadata({ title: c.name, artist: 'Live TV', artwork: c.logo ? [{ src: c.logo }] : [] });
+  }catch(e){}
+  const keep = document.activeElement && document.activeElement.classList.contains('ch');
+  const i = keep ? [...$('list').children].indexOf(document.activeElement) : -1;
+  render();
+  if(i >= 0 && $('list').children[i]) $('list').children[i].focus();
+}
+function pick(c){ play(c); armAuto(); }
+function step(d){
+  let l = visible(); if(!l.length) l = channels; if(!l.length) return;
+  const i = l.findIndex(c => cur && c.url === cur.url);
+  play(l[(i + d + l.length) % l.length]);
+  toast(cur.name);
+}
+v.addEventListener('click', () => { if(fs) toast(cur && cur.name); else if(v.paused) v.play().catch(() => {}); });
+
+/* ---------- fullscreen, media buttons, swipe ---------- */
+function bindMedia(on){
+  if(!('mediaSession' in navigator)) return;
+  try{
+    navigator.mediaSession.setActionHandler('nexttrack', on ? () => step(1) : null);
+    navigator.mediaSession.setActionHandler('previoustrack', on ? () => step(-1) : null);
+  }catch(e){}
+}
+function enterFs(){
+  armed = false; clearTimeout(afT);
+  if(fs || !cur) return;
+  fs = true; document.body.classList.add('fs');
+  const el = $('vidbox'); if(el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  bindMedia(true); toast(cur.name);
+}
+function exitFs(){
+  if(!fs) return;
+  fs = false; document.body.classList.remove('fs');
+  if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  bindMedia(false);
+  const on = document.querySelector('.ch.on'); if(on) on.focus();
+}
+document.addEventListener('fullscreenchange', () => { if(fs && !document.fullscreenElement) exitFs(); });
+$('bFs').onclick = enterFs;
+$('exit').onclick = e => { e.stopPropagation(); exitFs(); };
+$('vidbox').addEventListener('keydown', e => {
+  if(!fs && e.key === 'Enter'){ e.preventDefault(); enterFs(); }
+  else if(!fs && e.key === 'ArrowLeft'){ e.preventDefault(); const on = document.querySelector('.ch.on'); if(on) on.focus(); }
+});
+addEventListener('keydown', e => {
+  if(!fs || $('dlg').open) return;
+  const k = e.key; let h = true;
+  if(k === 'ArrowDown' || k === 'PageDown' || k === 'ChannelDown' || k === 'MediaTrackNext') step(1);
+  else if(k === 'ArrowUp' || k === 'PageUp' || k === 'ChannelUp' || k === 'MediaTrackPrevious') step(-1);
+  else if(k === 'Escape' || k === 'Backspace' || k === 'GoBack') exitFs();
+  else if(k === 'Enter' || k === ' ') toast(cur && cur.name);
+  else h = false;
+  if(h) e.preventDefault();
+});
+let sx = 0, sy = 0;
+$('vidbox').addEventListener('touchstart', e => { const t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+$('vidbox').addEventListener('touchend', e => {
+  if(!fs) return;
+  const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+  if(Math.max(Math.abs(dx), Math.abs(dy)) < 60) return;
+  // swipe up / left = next channel, swipe down / right = previous channel
+  const next = Math.abs(dx) > Math.abs(dy) ? dx < 0 : dy < 0;
+  step(next ? 1 : -1);
+}, { passive: true });
+
+/* ---------- auto fullscreen (TV layout, 3 s without input) ---------- */
+function armAuto(){
+  clearTimeout(afT); armed = false;
+  if(!store.get('auto', true) || !isTv() || fs || !cur) return;
+  armed = true; afT = setTimeout(enterFs, 3000);
+}
+['keydown', 'pointerdown', 'wheel', 'touchmove'].forEach(ev => addEventListener(ev, () => { if(armed) armAuto(); }, { passive: true }));
+$('list').addEventListener('scroll', () => { if(armed) armAuto(); });
+
+/* ---------- list keys, tabs, settings ---------- */
+$('list').addEventListener('keydown', e => {
+  if(e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const rows = [...$('list').querySelectorAll('.ch')], i = rows.indexOf(document.activeElement);
+  if(i < 0) return;
+  e.preventDefault();
+  const n = rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+  n.focus(); n.scrollIntoView({ block: 'nearest' });
+});
+function setTab(t){
+  tab = t;
+  $('tAll').setAttribute('aria-pressed', t === 'all');
+  $('tFav').setAttribute('aria-pressed', t === 'fav');
+  render();
+}
+$('tAll').onclick = () => setTab('all');
+$('tFav').onclick = () => setTab('fav');
+$('bSet').onclick = () => {
+  armed = false; clearTimeout(afT);
+  $('lay').value = store.get('layout', 'auto');
+  $('auto').checked = store.get('auto', true);
+  $('url').value = store.get('plUrl', '');
+  $('txt').value = ''; $('err').textContent = '';
+  $('dlg').showModal();
+};
+$('close').onclick = () => $('dlg').close();
+$('lay').onchange = () => { store.set('layout', $('lay').value); applyLayout(); };
+$('auto').onchange = () => store.set('auto', $('auto').checked);
+$('file').onchange = async e => { const f = e.target.files[0]; if(f) $('txt').value = await f.text(); };
+$('save').onclick = () => {
+  const url = $('url').value.trim(), txt = $('txt').value.trim();
+  if(!url && !txt && !store.get('plText', '') && !store.get('plUrl', '')){ $('err').textContent = 'Add a playlist link, paste text, or choose a file.'; return; }
+  if(txt){ store.set('plText', txt); store.set('plUrl', ''); }
+  else if(url){ store.set('plUrl', url); store.set('plText', ''); }
+  $('dlg').close();
+  loadPlaylist();
+};
+
+applyLayout();
+loadPlaylist();
+</script>
+</body>
+</html>
